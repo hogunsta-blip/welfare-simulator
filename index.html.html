@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생계급여·투자자산 시뮬레이터</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif;color:#202534;background:#f5f7fb}
+*{box-sizing:border-box}body{margin:0;padding:24px}.wrap{max-width:1000px;margin:auto}
+h1{font-size:clamp(24px,4vw,34px);margin:0 0 8px}.sub{color:#647084;margin:0 0 24px}
+.panel{background:white;border:1px solid #e1e6ef;border-radius:16px;padding:20px;margin:16px 0}
+h2{font-size:18px;margin:0 0 16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+label{display:block;font-size:13px;color:#526078;margin-bottom:6px}
+input{width:100%;padding:11px 12px;border:1px solid #ccd4e0;border-radius:9px;font-size:16px}
+small{color:#778297}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+button{border:0;border-radius:9px;padding:11px 16px;font-size:14px;font-weight:650;cursor:pointer;background:#243b63;color:white}
+button.secondary{background:#e9edf4;color:#29364c}
+.results{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.metric{background:#f1f4f9;border-radius:12px;padding:15px}.metric span{display:block;color:#657188;font-size:12px}.metric strong{display:block;font-size:22px;margin-top:7px;overflow-wrap:anywhere}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:right;padding:11px 8px;border-bottom:1px solid #e8ecf2;white-space:nowrap}th:first-child,td:first-child{text-align:left}
+.tablewrap{overflow-x:auto}.note{font-size:13px;line-height:1.65;color:#657188}
+@media(max-width:600px){body{padding:14px}.panel{padding:15px}th,td{padding:9px 6px;font-size:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>생계급여 · 투자자산 시뮬레이터</h1>
+<p class="sub">숫자를 바꾸면 월별 생계급여와 투자자산을 즉시 다시 계산합니다. 입력값은 이 브라우저 안에서만 계산됩니다.</p>
+
+<section class="panel">
+<h2>1. 시작 자산과 월 소득·지출</h2>
+<div class="grid">
+<div><label for="start">초기 보유 금융자산 (원)</label><input id="start" type="number" value="1000000"></div>
+<div><label for="wage">월 근로소득 (원)</label><input id="wage" type="number" value="910000"></div>
+<div><label for="living">월 생활비 (원)</label><input id="living" type="number" value="200000"></div>
+<div><label for="fixed">월 고정지출 (원)</label><input id="fixed" type="number" value="109185"></div>
+<div><label for="cards">월 카드 구매비 (원)</label><input id="cards" type="number" value="300000"></div>
+<div><label for="years">계산 기간 (년)</label><input id="years" type="number" min="1" max="50" value="15"></div>
+</div>
+</section>
+
+<section class="panel">
+<h2>2. 생계급여 조건</h2>
+<div class="grid">
+<div><label for="benefit1">청년공제 적용 중 월 생계급여 (원)</label><input id="benefit1" type="number" value="658533"></div>
+<div><label for="benefit2">청년공제 종료 후 월 생계급여 (원)</label><input id="benefit2" type="number" value="238533"></div>
+<div><label for="switchMonth">청년공제 종료 시점 (시작 후 개월)</label><input id="switchMonth" type="number" value="46"><small>46개월 = 2030년 10월</small></div>
+<div><label for="threshold">재산공제 기준액 (원)</label><input id="threshold" type="number" value="66000000"></div>
+<div><label for="rate">금융재산 월 환산율 (%)</label><input id="rate" type="number" step="0.01" value="6.26"></div>
+</div>
+</section>
+
+<section class="panel">
+<h2>3. 주식투자 조건</h2>
+<div class="grid">
+<div><label for="yield">연평균 투자수익률 (%)</label><input id="yield" type="number" step="0.1" value="15"></div>
+</div>
+<div class="actions"><button id="reset" class="secondary" type="button">기본값으로 초기화</button><button id="csv" type="button">결과 CSV 저장</button></div>
+</section>
+
+<section class="panel">
+<h2>4. 계산 결과</h2>
+<div class="results">
+<div class="metric"><span>첫 달 투자 가능 금액</span><strong id="firstInvest">-</strong></div>
+<div class="metric"><span>첫해 말 예상 자산</span><strong id="year1">-</strong></div>
+<div class="metric"><span>마지막 해 예상 자산</span><strong id="lastAsset">-</strong></div>
+<div class="metric"><span>생계급여 0원 예상 시점</span><strong id="zeroDate">-</strong></div>
+</div>
+</section>
+
+<section class="panel">
+<h2>연도별 자산 변화</h2>
+<div class="tablewrap"><table><thead><tr><th>연도</th><th>연말 자산</th><th>월 투자금*</th><th>월 생계급여</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p class="note">* 해당 연도 마지막 달 기준. 연 수익률을 월 복리로 환산하고 매월 말 투자금을 추가하는 방식입니다.</p>
+</section>
+
+<section class="panel">
+<h2>계산 가정 및 유의사항</h2>
+<p class="note">① 매월 초 금융자산을 기준으로 재산 환산액을 계산하고, 생계급여를 조정한 뒤 월 투자 가능액을 자산에 더합니다.<br>
+② 주식 수익률은 연 수익률을 월 복리로 환산해 적용합니다. 실제 수익률은 매월·매년 달라질 수 있습니다.<br>
+③ 재산공제 기준액은 사용자가 직접 수정할 수 있는 단순 가정값입니다. 실제 기초생활보장 재산 산정은 기본재산액, 금융재산 공제, 인정 부채, 재산 종류 등에 따라 달라집니다.<br>
+④ 주식 평가액은 금융재산으로 반영합니다. 카드 구매액은 소비한 것으로 보고, 보유 카드의 별도 자산가치는 계산하지 않습니다.<br>
+⑤ 이 도구는 참고용 시뮬레이션이며 실제 급여 판정이나 지급액을 보장하지 않습니다.</p>
+</section>
+</div>
+<script>
+const ids=['start','wage','living','fixed','cards','years','benefit1','benefit2','switchMonth','threshold','rate','yield'];
+const defaults={start:1000000,wage:910000,living:200000,fixed:109185,cards:300000,years:15,benefit1:658533,benefit2:238533,switchMonth:46,threshold:66000000,rate:6.26,yield:15};
+const el=id=>document.getElementById(id);
+const won=n=>Math.round(n).toLocaleString('ko-KR')+'원';
+let latest=[];
+function calculate(){
+ const x={}; ids.forEach(k=>x[k]=Number(el(k).value)||0);
+ const months=Math.max(1,Math.min(600,Math.floor(x.years*12)));
+ const monthlyRate=Math.pow(1+x.yield/100,1/12)-1;
+ let asset=x.start, zeroMonth=null, data=[];
+ for(let m=1;m<=months;m++){
+   const base=m>=x.switchMonth?x.benefit2:x.benefit1;
+   const benefit=Math.max(0,base-Math.max(0,asset-x.threshold)*x.rate/100);
+   if(benefit<=0&&zeroMonth===null)zeroMonth=m;
+   const invest=x.wage-x.living-x.fixed-x.cards+benefit;
+   const startAsset=asset;
+   asset=Math.max(0,asset*(1+monthlyRate)+invest);
+   data.push({month:m,year:2027+Math.floor((m-1)/12),asset,benefit,invest,profit:asset-startAsset-invest});
+ }
+ latest=data;
+ const annual=data.filter(d=>d.month%12===0);
+ const firstYear=data.find(d=>d.month===Math.min(12,months));
+ const last=data[data.length-1];
+ el('firstInvest').textContent=won(x.wage-x.living-x.fixed-x.cards+x.benefit1);
+ el('year1').textContent=won(firstYear.asset);
+ el('lastAsset').textContent=won(last.asset);
+ el('zeroDate').textContent=zeroMonth?`${2027+Math.floor((zeroMonth-1)/12)}년 ${((zeroMonth-1)%12)+1}월`:'계산 기간 내 0원 도달 없음';
+ el('rows').innerHTML=annual.map(d=>`<tr><td>${d.year}년</td><td>${won(d.asset)}</td><td>${won(d.invest)}</td><td>${won(d.benefit)}</td></tr>`).join('');
+}
+ids.forEach(k=>el(k).addEventListener('input',calculate));
+el('reset').addEventListener('click',()=>{ids.forEach(k=>el(k).value=defaults[k]);calculate()});
+el('csv').addEventListener('click',()=>{
+ const header='월,연도,월말 금융자산,월 생계급여,월 투자금,월 투자수익';
+ const lines=latest.map(d=>[d.month,d.year,Math.round(d.asset),Math.round(d.benefit),Math.round(d.invest),Math.round(d.profit)].join(','));
+ const blob=new Blob(['\ufeff'+[header,...lines].join('\n')],{type:'text/csv;charset=utf-8'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='생계급여_투자자산_시뮬레이션.csv';a.click();URL.revokeObjectURL(url);
+});
+calculate();
+</script>
+</body></html>
